@@ -5,6 +5,8 @@ const Applet = imports.ui.applet;
 const PopupMenu = imports.ui.popupMenu;
 const Mainloop = imports.mainloop;
 const GLib = imports.gi.GLib;
+const Gio = imports.gi.Gio;
+const Atk = imports.gi.Atk;
 const ByteArray = imports.byteArray;
 
 class TapGuardApplet extends Applet.TextIconApplet {
@@ -26,13 +28,15 @@ class TapGuardApplet extends Applet.TextIconApplet {
         this._toggleItem.connect('activate', () => this._command(['--ctl', 'toggle']));
         this.menu.addMenuItem(this._toggleItem);
 
-        let tap = new PopupMenu.PopupMenuItem('Mode: Block taps only');
-        tap.connect('activate', () => this._command(['--ctl', 'mode', 'tap']));
-        this.menu.addMenuItem(tap);
-
-        let full = new PopupMenu.PopupMenuItem('Mode: Full trackpad lockout');
-        full.connect('activate', () => this._command(['--ctl', 'mode', 'full']));
-        this.menu.addMenuItem(full);
+        this._modeItems = {};
+        for (let mode of ['tap', 'full']) {
+            let item = new PopupMenu.PopupMenuItem('');
+            item.actor.accessible_role = Atk.Role.RADIO_MENU_ITEM;
+            item.connect('activate', () => this._selectMode(mode));
+            this._modeItems[mode] = item;
+            this.menu.addMenuItem(item);
+        }
+        this._syncMode(null);
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         let settings = new PopupMenu.PopupMenuItem('Settings / delay slider…');
@@ -48,6 +52,41 @@ class TapGuardApplet extends Applet.TextIconApplet {
             this._update();
             return true;
         });
+    }
+
+    _syncMode(mode) {
+        for (let value of ['tap', 'full']) {
+            let selected = mode === value;
+            let description = value === 'tap' ? 'Block taps only' : 'Full trackpad lockout';
+            this._modeItems[value].setShowDot(selected);
+            this._modeItems[value].label.set_text(
+                (selected ? 'Selected: ' : 'Select: ') + description);
+        }
+    }
+
+    _selectMode(mode) {
+        try {
+            let process = Gio.Subprocess.new(
+                ['/usr/bin/python3', this._script, '--ctl', 'mode', mode],
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
+            process.communicate_utf8_async(null, null, (source, result) => {
+                try {
+                    let [ok, stdout, stderr] = source.communicate_utf8_finish(result);
+                    if (!ok || !source.get_successful())
+                        throw new Error(stderr || 'Mode command failed');
+                    let answer = JSON.parse(stdout);
+                    if (!answer.ok) throw new Error(answer.error || 'Mode rejected');
+                    // Mark only the controller-confirmed mode, never an optimistic choice.
+                    if (!this._removed) this._syncMode(answer.mode);
+                } catch (error) {
+                    global.logError(error);
+                    if (!this._removed) this._update();
+                }
+            });
+        } catch (error) {
+            global.logError(error);
+            this._update();
+        }
     }
 
     _command(args) {
@@ -68,6 +107,7 @@ class TapGuardApplet extends Applet.TextIconApplet {
             if (!s.timestamp || (Date.now() / 1000) - s.timestamp > 3.0)
                 throw new Error('Controller not responding');
             this._lastStatus = s;
+            this._syncMode(s.mode);
             let label;
             if (!s.enabled)
                 label = 'TG Paused';
@@ -83,6 +123,7 @@ class TapGuardApplet extends Applet.TextIconApplet {
             this._toggleItem.label.set_text(s.enabled ? 'Pause protection' : 'Resume protection');
         } catch (error) {
             this._lastStatus = null;
+            this._syncMode(null);
             this.set_applet_label('TG Offline');
             this.set_applet_tooltip('TapGuard controller is not running');
             this._toggleItem.label.set_text('Pause / Resume');
@@ -90,10 +131,12 @@ class TapGuardApplet extends Applet.TextIconApplet {
     }
 
     on_applet_clicked(event) {
+        this._update();
         this.menu.toggle();
     }
 
     on_applet_removed_from_panel() {
+        this._removed = true;
         if (this._timer) {
             Mainloop.source_remove(this._timer);
             this._timer = 0;

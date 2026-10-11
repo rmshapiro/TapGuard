@@ -1,4 +1,13 @@
-# TapGuard v3.1
+# TapGuard v3.1.1
+
+For the applet-only v3.1 upgrade, see [UPGRADE-3.1.1.md](UPGRADE-3.1.1.md). The v3.1.1 applet fix awaits on-device Cinnamon acceptance testing.
+
+Applet checks (requires Node.js):
+
+```bash
+node --check cinnamon/tapguard@local/applet.js
+node tests/test_applet.js
+```
 
 Trackpad protection while typing, with a Cinnamon panel countdown and a small settings window.
 
