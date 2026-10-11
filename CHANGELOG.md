@@ -1,3 +1,8 @@
+# v3.1.1
+
+- Show confirmed Cinnamon menu mode with native radio selection, actionable labels and accessible checked state.
+- Add applet-only upgrade with backup; controller and settings unchanged.
+
 # Changelog
 
 ## v3.1

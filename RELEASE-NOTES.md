@@ -1,3 +1,13 @@
+# TapGuard v3.1.1
+
+The Cinnamon mode menu now marks the confirmed choice with a native radio dot and Selected label. The alternate option says Select. Mode commands update from the controller response; offline status clears selection.
+
+Existing installations can run `bash upgrade-applet.sh` without sudo, then log out/in. This backs up and replaces only the applet, preserving controller settings and autostart. See UPGRADE-3.1.1.md for installation, rollback and acceptance checks.
+
+JavaScript syntax and headless behavior checks, all seven mocked controller tests, Python compilation and shell syntax checks pass. The owner confirmed the mode menu fix in Cinnamon on 2026-10-11. Broader hardware, theme, keyboard accessibility and login checks were not independently verified.
+
+---
+
 # TapGuard v3.1
 
 Typing protection for Linux Mint Cinnamon/X11 with the Apple SPI Touchpad. Includes the v3.1 live delay slider fix, Cinnamon applet, controller supervisor, per-user installer and uninstall/disable helper.

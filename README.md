@@ -1,4 +1,13 @@
-# TapGuard v3.1
+# TapGuard v3.1.1
+
+For the applet-only v3.1 upgrade, see [UPGRADE-3.1.1.md](UPGRADE-3.1.1.md). The owner confirmed the mode menu fix in Cinnamon on 2026-10-11. This confirmation does not imply a full hardware or accessibility test.
+
+Applet checks (requires Node.js):
+
+```bash
+node --check cinnamon/tapguard@local/applet.js
+node tests/test_applet.js
+```
 
 Trackpad protection while typing, with a Cinnamon panel countdown and a small settings window.
 
@@ -21,7 +30,7 @@ Automated checks cover controller logic with mocked XInput calls. Real trackpad 
 
 ## Install
 
-Download `TapGuard-v3.1.zip` from the v3.1 release, extract it, and open a terminal in the extracted `TapGuard` folder. Install prerequisites on the target Mint system:
+Download `TapGuard-v3.1.1.zip` from the v3.1.1 release, extract it, and open a terminal in the extracted `TapGuard` folder. Install prerequisites on the target Mint system:
 
 ```bash
 sudo apt install python3 python3-tk xinput coreutils

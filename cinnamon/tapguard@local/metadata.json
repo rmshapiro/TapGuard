@@ -2,7 +2,7 @@
   "uuid": "tapguard@local",
   "name": "TapGuard",
   "description": "Timed thumb-tap and touchpad lockout with live countdown and controls",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "max-instances": "1",
   "icon": "input-touchpad"
 }
