@@ -32,4 +32,4 @@ Remove TapGuard from the panel. Copy applet.js and metadata.json from the backup
 
 Passed JavaScript syntax check, headless applet mode confirmation/exclusivity/failure/unknown-state checks, all seven existing mocked controller tests, Python compilation, and shell syntax checks. The controller source and original installer scripts are byte-for-byte unchanged. The native setShowDot API and its accessibility checked-state behavior were inspected in the installed Cinnamon source and upstream https://github.com/linuxmint/cinnamon/blob/master/js/ui/popupMenu.js.
 
-This package has not been tested in the user's running Cinnamon environment. Theme rendering, keyboard/screen-reader behavior, hardware behavior and login persistence require the on-device verification above.
+The owner confirmed the mode menu fix in Cinnamon on 2026-10-11. This is user-reported verification; keyboard/screen-reader behavior, hardware behavior and login persistence were not independently verified.
