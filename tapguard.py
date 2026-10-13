@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""TapGuard v3.1: timed X11 touchpad suppression, Cinnamon panel + Tk controls.
+"""TapGuard v3.2: timed X11 touchpad suppression, Cinnamon panel + Tk controls.
 
 Requires an X11 session, xinput, and (for the GUI) python3-tk.
-No root access and no keyboard content is recorded.
+Palm mode requires one-time touchpad access setup. No keyboard content is recorded.
 """
 
 from __future__ import annotations
@@ -21,7 +21,11 @@ import sys
 import threading
 import time
 
+from palm import PalmMonitor
+
 DEVICE = "Apple SPI Touchpad"
+DWT_PROP = "libinput Disable While Typing Enabled"
+DWT_BACKUP = Path.home() / ".cache" / "tapguard" / "dwt-original.json"
 TAPPING_PROP = "libinput Tapping Enabled"
 BASE = Path.home() / ".cache" / "tapguard"
 CONFIG_PATH = Path.home() / ".config" / "tapguard.json"  # reuse v2 settings
@@ -67,7 +71,7 @@ def read_config() -> dict:
         settings = {}
     return {
         "delay": clamp_delay(settings.get("delay", DEFAULT_DELAY)),
-        "mode": settings.get("mode") if settings.get("mode") in ("tap", "full") else DEFAULT_MODE,
+        "mode": settings.get("mode") if settings.get("mode") in ("tap", "full", "palm") else DEFAULT_MODE,
     }
 
 
@@ -106,6 +110,12 @@ def seconds_remaining(last_key: float, now: float, delay: float) -> float:
 class Controller:
     def __init__(self):
         self.config = read_config()
+        self.palm = PalmMonitor()
+        self.palm_generation = 0
+        self.device_error = ""
+        self.last_device_error = 0.0
+        self.original_dwt = None
+        self.current_dwt = None
         self.enabled = True
         self.last_key = 0.0
         self.current_tap = 1
@@ -172,8 +182,12 @@ class Controller:
                 self.restore()
         elif command == "mode":
             mode = request.get("value")
-            if mode not in ("tap", "full"):
+            if mode not in ("tap", "full", "palm"):
                 return {"ok": False, "error": "Unknown mode"}
+            if mode == "palm" and not self.palm.snapshot()["ready"]:
+                return {"ok": False, "error": self.palm.snapshot()["error"]}
+            if mode == "palm" or self.config["mode"] == "palm":
+                self.last_key = 0.0
             self.config["mode"] = mode
             save_config(self.config)
             # Transition from full -> tap while locked must reenable the device.
@@ -196,25 +210,53 @@ class Controller:
             run_xinput("set-prop", DEVICE, TAPPING_PROP, str(value))
             self.current_tap = value
 
+    def set_dwt(self, value):
+        if value is not None and value != self.current_dwt:
+            run_xinput("set-prop", DEVICE, DWT_PROP, str(value))
+            self.current_dwt = value
+
     def restore(self):
         # Enable first so even a subsequent error does not strand the pointer.
         self.set_device(True)
         self.set_tapping(True)
+        self.set_dwt(self.original_dwt)
 
     def status(self):
         remaining = (seconds_remaining(self.last_key, time.monotonic(),
                                        self.config["delay"]) if self.enabled else 0.0)
+        palm = self.palm.snapshot()
+        if self.device_error:
+            palm.update(ready=False, palm=False, error=self.device_error)
+        palm_mode = self.config["mode"] == "palm"
         return {
+            "palm_ready": palm["ready"],
+            "palm_error": palm["error"],
+            "palm_detected": palm["palm"],
             "timestamp": time.time(),
             "enabled": self.enabled,
             "mode": self.config["mode"],
             "delay": self.config["delay"],
-            "remaining": round(remaining, 2),
-            "locked": self.enabled and remaining > 0,
+            "remaining": 0.0 if palm_mode else round(remaining, 2),
+            "locked": self.enabled and (palm["ready"] and palm["palm"] if palm_mode else remaining > 0),
             "device_enabled": self.current_device_enabled,
         }
 
     def apply_state(self):
+        if self.config["mode"] == "palm":
+            state = self.palm.snapshot()
+            if state["generation"] != self.palm_generation:
+                self.current_device_enabled = None
+                self.current_tap = None
+                self.current_dwt = None
+                self.palm_generation = state["generation"]
+            if self.enabled and state["ready"]:
+                self.set_dwt(0)
+                self.set_tapping(True)
+                self.set_device(not state["palm"])
+            else:
+                self.restore()  # Reader failure is fail-open, never a typing lockout.
+            return
+        self.set_dwt(self.original_dwt)
         remaining = seconds_remaining(self.last_key, time.monotonic(),
                                       self.config["delay"]) if self.enabled else 0
         if remaining > 0:
@@ -232,6 +274,12 @@ class Controller:
         read_property("Device Enabled")
         read_property(TAPPING_PROP)
         restore_touchpad()
+        try:
+            self.original_dwt = int(json.loads(DWT_BACKUP.read_text()))
+        except (OSError, ValueError):
+            self.original_dwt = read_property(DWT_PROP)
+        self.current_dwt = read_property(DWT_PROP)
+        self.palm.start()
         self.monitor = subprocess.Popen(
             ["stdbuf", "-oL", "xinput", "test-xi2", "--root"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
@@ -264,14 +312,28 @@ class Controller:
                             pass
                     finally:
                         client.close()
-                self.apply_state()
+                try:
+                    self.apply_state()
+                    self.device_error = ""
+                except (OSError, subprocess.SubprocessError) as exc:
+                    if self.config["mode"] != "palm":
+                        raise
+                    self.current_device_enabled = None
+                    self.current_dwt = None
+                    self.current_tap = None
+                    self.device_error = str(exc)
+                    if time.monotonic() - self.last_device_error > 5:
+                        print("Touchpad temporarily unavailable:", exc, file=sys.stderr, flush=True)
+                        self.last_device_error = time.monotonic()
                 write_status(self.status())
                 time.sleep(POLL)
         finally:
             self.stop_event.set()
+            self.palm.close()
             # Force a real recovery command even if cached state is stale.
             try:
                 restore_touchpad()
+                self.set_dwt(self.original_dwt)
             except Exception as exc:
                 print("Controller restore failed:", exc, file=sys.stderr, flush=True)
             if self.sock:
@@ -309,6 +371,14 @@ def supervise():
             print("TapGuard is already running")
             return 0
         try:
+            # Retain baseline across an interrupted supervisor/session.
+            try:
+                original_dwt = int(json.loads(DWT_BACKUP.read_text()))
+            except (OSError, ValueError):
+                original_dwt = read_property(DWT_PROP)
+            if original_dwt not in (0, 1):
+                raise RuntimeError("Invalid typing-protection recovery state")
+            DWT_BACKUP.write_text(json.dumps(original_dwt))
             with LOG_PATH.open("a") as log:
                 worker = subprocess.Popen(
                     [sys.executable, str(Path(__file__).resolve()), "--worker"],
@@ -326,6 +396,9 @@ def supervise():
             # Last-resort cleanup after child exits unexpectedly.
             try:
                 restore_touchpad()
+                if DWT_BACKUP.exists():
+                    run_xinput("set-prop", DEVICE, DWT_PROP, str(json.loads(DWT_BACKUP.read_text())))
+                    DWT_BACKUP.unlink()
             except Exception as exc:
                 print("Failsafe restore failed:", exc, file=sys.stderr)
             signal.signal(signal.SIGTERM, previous_term)
@@ -349,14 +422,14 @@ def launch_gui():
     from tkinter import ttk
 
     window = tk.Tk()
-    window.title("TapGuard v3.1 Settings")
-    window.geometry("470x385")
+    window.title("TapGuard v3.2 Settings")
+    window.geometry("500x430")
     window.minsize(410, 345)
     window.resizable(True, True)
     frm = ttk.Frame(window, padding=18)
     frm.pack(fill="both", expand=True)
     ttk.Label(frm, text="TapGuard", font=("Sans", 17, "bold")).pack(anchor="w")
-    ttk.Label(frm, text="Typing protection for the Apple SPI Touchpad").pack(anchor="w", pady=(0, 10))
+    ttk.Label(frm, text="Palm and typing protection for the Apple SPI Touchpad").pack(anchor="w", pady=(0, 10))
 
     cfg = read_config()
     mode = tk.StringVar(value=cfg["mode"])
@@ -366,7 +439,8 @@ def launch_gui():
 
     row = ttk.LabelFrame(frm, text="Protection mode", padding=8)
     row.pack(fill="x", pady=7)
-    for text, val in (("Block entire trackpad", "full"),
+    for text, val in (("Lock while palm is down (no typing delay)", "palm"),
+                      ("After typing: block entire trackpad", "full"),
                       ("Block taps only", "tap")):
         ttk.Radiobutton(row, text=text, value=val, variable=mode,
                         command=lambda: send("mode", mode.get())).pack(anchor="w")
@@ -425,13 +499,22 @@ def launch_gui():
                 raise OSError("Controller rejected request")
             remaining = answer["remaining"]
             is_enabled = answer["enabled"]
-            countdown.set(f"{remaining:.1f}s remaining" if remaining > 0 else
-                          ("Ready" if is_enabled else "Paused"))
-            status.set(("Full lockout" if answer["mode"] == "full" else "Tap-only")
+            countdown.set(("Palm down — locked" if answer["locked"] else "Ready") if answer["mode"] == "palm" and is_enabled else
+                          (f"{remaining:.1f}s remaining" if remaining > 0 else
+                          ("Ready" if is_enabled else "Paused")))
+            status.set(({"palm": "Palm lockout", "full": "Full lockout", "tap": "Tap-only"}[answer["mode"]])
                        + (" • running" if is_enabled else " • paused"))
+            scale.state(['disabled'] if answer['mode'] == 'palm' else ['!disabled'])
+            if answer['mode'] == 'palm':
+                delay_display.set('Palm mode: no typing delay')
+                if not answer.get('palm_ready'):
+                    countdown.set('Palm sensor unavailable — input restored')
+                    status.set(answer.get('palm_error', ''))
             if not dragging:
                 delay.set(answer["delay"])
             mode.set(answer["mode"])
+            if answer["mode"] == "palm":
+                delay_display.set("Palm mode: no typing delay")
         except (OSError, ValueError, KeyError):
             countdown.set("Offline")
             status.set("Start the TapGuard background controller")
@@ -447,7 +530,7 @@ def main():
     action.add_argument("--daemon", action="store_true", help="supervisor + controller, for autostart")
     action.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     action.add_argument("--gui", action="store_true", help="Tk settings window")
-    action.add_argument("--ctl", nargs="+", metavar="ARG", help="status, toggle, pause, resume, stop, mode tap|full, delay N")
+    action.add_argument("--ctl", nargs="+", metavar="ARG", help="status, toggle, pause, resume, stop, mode tap|full|palm, delay N")
     args = parser.parse_args()
     if args.daemon or args.worker:
         if os.environ.get("XDG_SESSION_TYPE") != "x11" or not os.environ.get("DISPLAY"):
@@ -473,7 +556,7 @@ def main():
         elif name in ("status", "toggle", "pause", "resume", "stop") and not values:
             answer = control(name)
         else:
-            parser.error("Usage: --ctl status|toggle|pause|resume|stop|mode tap|full|delay 1.5")
+            parser.error("Usage: --ctl status|toggle|pause|resume|stop|mode tap|full|palm|delay 1.5")
         print(json.dumps(answer, indent=2))
         return 0 if answer.get("ok") else 1
     return 2

@@ -18,9 +18,10 @@ if [[ -f "$HOME/bin/tapguard.py" ]] && python3 "$HOME/bin/tapguard.py" --ctl sta
 fi
 mkdir -p "$HOME/bin" "$HOME/.config/autostart" "$HOME/.local/share/cinnamon/applets/tapguard@local"
 if [[ -f "$HOME/bin/tapguard.py" ]]; then
-  cp -p "$HOME/bin/tapguard.py" "$HOME/bin/tapguard-before-v3.1-$(date +%Y%m%d-%H%M%S).py"
+  cp -p "$HOME/bin/tapguard.py" "$HOME/bin/tapguard-before-v3.2-$(date +%Y%m%d-%H%M%S).py"
 fi
 install -m 755 "$HERE/tapguard.py" "$HOME/bin/tapguard.py"
+install -m 644 "$HERE/palm.py" "$HOME/bin/palm.py"
 install -m 644 "$HERE/cinnamon/tapguard@local/metadata.json" "$HERE/cinnamon/tapguard@local/applet.js" "$HOME/.local/share/cinnamon/applets/tapguard@local/"
 python3 - <<'PY'
 from pathlib import Path
@@ -29,12 +30,12 @@ script = str(Path.home() / 'bin' / 'tapguard.py')
 for char in ('\\', '"', '`', '$'):
     script = script.replace(char, '\\' + char)
 script = script.replace('\\', '\\\\').replace('%', '%%')
-entry = '[Desktop Entry]\nType=Application\nName=TapGuard v3.1\nComment=Trackpad protection while typing\nExec=/usr/bin/python3 "' + script + '" --daemon\nTerminal=false\nX-GNOME-Autostart-enabled=true\nOnlyShowIn=X-Cinnamon;\n'
+entry = '[Desktop Entry]\nType=Application\nName=TapGuard v3.2\nComment=Trackpad protection while typing\nExec=/usr/bin/python3 "' + script + '" --daemon\nTerminal=false\nX-GNOME-Autostart-enabled=true\nOnlyShowIn=X-Cinnamon;\n'
 path = Path.home() / '.config/autostart/tapguard-v3.desktop'
 path.write_text(entry)
 path.chmod(0o644)
 PY
-printf '%s\n' 'Installed TapGuard v3.1; autostart is enabled for future Cinnamon logins.' \
+printf '%s\n' 'Installed TapGuard v3.2; autostart is enabled for future Cinnamon logins.' \
  'Close all old TapGuard processes before starting this version.' \
  'Test now: python3 ~/bin/tapguard.py --daemon (Ctrl+C to stop)' \
  'Settings: python3 ~/bin/tapguard.py --gui' \

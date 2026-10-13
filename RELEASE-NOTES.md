@@ -1,21 +1,9 @@
-# TapGuard v3.1.1
+# TapGuard v3.2 — Palm lockout (candidate)
 
-The Cinnamon mode menu now marks the confirmed choice with a native radio dot and Selected label. The alternate option says Select. Mode commands update from the controller response; offline status clears selection.
+Adds a persistent Palm mode based on the owner-verified prototype: any size-classified palm blocks the entire touchpad until that contact lifts. Keyboard activity causes no delay in this mode. Existing typing modes are retained.
 
-Existing installations can run `bash upgrade-applet.sh` without sudo, then log out/in. This backs up and replaces only the applet, preserving controller settings and autostart. See UPGRADE-3.1.1.md for installation, rollback and acceptance checks.
+Includes Cinnamon/Settings controls, saved selection, stale-sensor fail-open behavior, reconnection attempts, event-drop resynchronization and restoration of libinput's original typing-protection setting. Palm mode needs one-time, touchpad-only uaccess setup; no root process runs during normal operation.
 
-JavaScript syntax and headless behavior checks, all seven mocked controller tests, Python compilation and shell syntax checks pass. The owner confirmed the mode menu fix in Cinnamon on 2026-10-11. Broader hardware, theme, keyboard accessibility and login checks were not independently verified.
+Existing users: run `bash upgrade-palm.sh` without sudo. It requests sudo for device access, backs up the old installation, preserves startup preferences and activates/saves Palm mode. Log out/in to refresh the panel. See README.md for new installation, recovery, limitations and rollback.
 
----
-
-# TapGuard v3.1
-
-Typing protection for Linux Mint Cinnamon/X11 with the Apple SPI Touchpad. Includes the v3.1 live delay slider fix, Cinnamon applet, controller supervisor, per-user installer and uninstall/disable helper.
-
-This release is based on the original downloaded `tapguard-v3.1.zip`, with documented publication fixes for recovery cleanup, local control handling, installer checks and desktop entry quoting. It is not byte-identical to the original archive.
-
-Target environment: Linux Mint 22.3, Cinnamon 6.6.9, X11; original package identifies a 2016 MacBook Pro without Touch Bar. No other distributions, desktops, devices or Wayland are claimed supported.
-
-Automated controller tests and syntax checks pass. Physical trackpad recovery, GUI, applet and login acceptance testing has not been repeated for this repackaged build. Keep an external mouse available during initial full-lockout testing. Read the README recovery instructions before enabling protection.
-
-Download `TapGuard-v3.1.zip`, extract it, then run `bash install.sh` without sudo. MIT licensed.
+The prototype was verified by the owner on October 13, 2026. The permanent integration, login startup and reconnection need on-device acceptance before a final public release. Automated checks cover the controller, contact tracking and applet; see README.md for commands.

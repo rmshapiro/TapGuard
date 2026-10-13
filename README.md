@@ -1,120 +1,98 @@
-# TapGuard v3.1.1
+# TapGuard v3.2 — Palm lockout
 
-For the applet-only v3.1 upgrade, see [UPGRADE-3.1.1.md](UPGRADE-3.1.1.md). The owner confirmed the mode menu fix in Cinnamon on 2026-10-11. This confirmation does not imply a full hardware or accessibility test.
+Palm down: block the entire Apple SPI Touchpad, including other fingers, movement, scrolling, taps and physical clicks. Palm lifted: restore input without a typing cooldown. Existing typing-based full and tap-only modes remain available.
 
-Applet checks (requires Node.js):
+Targets Linux Mint Cinnamon/X11 and Apple SPI Touchpad. Uses the contact-size threshold of 1600 successfully tested by the owner on October 13, 2026. A contact remains classified as palm until it lifts. This is not a generic touchpad or Wayland utility.
+
+## Upgrade an existing installation
+
+Extract TapGuard-v3.2.zip and open a terminal in the TapGuard folder. Run as your desktop user, without sudo:
 
 ```bash
-node --check cinnamon/tapguard@local/applet.js
-node tests/test_applet.js
+bash upgrade-palm.sh
 ```
 
-Trackpad protection while typing, with a Cinnamon panel countdown and a small settings window.
+The access setup prompts for sudo once. It installs `/etc/udev/rules.d/70-tapguard-palm.rules`, granting the active desktop user access to only the named Apple SPI Touchpad event device. It does not add you to the input group or grant keyboard access. Other programs running as that user may also access this touchpad; the standard uaccess ACL grants read/write access, although TapGuard only reads events.
 
-TapGuard targets **Linux Mint Cinnamon on X11 with an Apple SPI Touchpad**. It watches keyboard press activity, temporarily blocks the trackpad (or just tap-to-click), and restores it after a configurable idle delay of 0.5–5 seconds. The initial default is full trackpad lockout with a 1.5-second delay; existing settings take precedence.
+The upgrade verifies access before stopping the old controller. It backs up the controller, applet, config and startup entry under `~/.local/share/tapguard/backups/`, installs both controller modules and the applet, preserves the previous autostart entry or its absence, starts the controller and selects/saves Palm mode. Your previous delay remains saved for typing modes. Log out/in to reload Cinnamon's menu. Palm mode is active immediately after the upgrade command succeeds.
 
-## Platform and verification
+## New installation
 
-The original v3.1 package describes a 2016 MacBook Pro without Touch Bar running Linux Mint 22.3 Cinnamon/X11. The packaging environment was directly verified as Mint 22.3, Cinnamon 6.6.9, X11. That environment check is **not a fresh hardware acceptance test**.
-
-Automated checks cover controller logic with mocked XInput calls. Real trackpad behavior, crash recovery, Cinnamon applet behavior, Tk slider interaction and login autostart still require on-device acceptance testing for this repackaged release. No cross-distro, other desktop, other touchpad, or Wayland support is claimed. The device name is currently fixed to `Apple SPI Touchpad`; this is not a generic touchpad utility.
-
-## Features
-
-- Full lockout: blocks pointer motion, scrolling and clicks while typing.
-- Tap-only: blocks tap-to-click while preserving pointer motion and physical clicks.
-- Panel countdown, pause/resume, mode controls and settings launcher.
-- Tk settings window; closing it leaves the controller running.
-- A separate supervisor attempts recovery if its worker exits.
-- Per-user installation and Cinnamon login autostart, without root access.
-
-## Install
-
-Download `TapGuard-v3.1.1.zip` from the v3.1.1 release, extract it, and open a terminal in the extracted `TapGuard` folder. Install prerequisites on the target Mint system:
+Install prerequisites:
 
 ```bash
-sudo apt install python3 python3-tk xinput coreutils
-```
-
-Close older TapGuard versions and remove their Startup Applications entries before installing. Run the following **without sudo** from your Cinnamon/X11 session:
-
-```bash
+sudo apt install python3 python3-tk python3-evdev xinput coreutils
+bash enable-palm-access.sh
 bash install.sh
 python3 ~/bin/tapguard.py --daemon
 ```
 
-The installer enables autostart for subsequent Cinnamon logins. It installs the controller at `~/bin/tapguard.py`, the applet at `~/.local/share/cinnamon/applets/tapguard@local/`, and the startup entry at `~/.config/autostart/tapguard-v3.desktop`. Existing controller files are backed up and settings are preserved.
-
-Keep the first controller terminal open. In a second terminal:
+Keep that terminal open. In another terminal, after the reader has started:
 
 ```bash
-python3 ~/bin/tapguard.py --gui
+python3 ~/bin/tapguard.py --ctl mode palm
 ```
 
-Start with tap-only mode and keep an external mouse available during testing. Verify typing, idle restoration, pause/resume and Ctrl+C recovery before relying on full lockout. Add **TapGuard** through Cinnamon panel → Applets → Manage. Log out and back in if Cinnamon does not discover the applet.
+The full installer enables Cinnamon login autostart. Add TapGuard via panel → Applets. Initial mode remains full typing lockout until Palm mode is selected; existing saved settings take precedence.
 
 ## Controls
 
+Panel and Settings offer Palm lockout, typing full lockout and typing tap-only. Palm mode disables the typing-delay slider and displays Palm/Ready rather than a countdown. Pause restores input and the original libinput typing-protection setting. Resume returns to the selected mode. Selecting another mode restores the original libinput typing setting; Palm mode turns it off only while protection is enabled and the sensor is ready.
+
 ```bash
+python3 ~/bin/tapguard.py --gui
 python3 ~/bin/tapguard.py --ctl status
-python3 ~/bin/tapguard.py --ctl mode tap
+python3 ~/bin/tapguard.py --ctl mode palm
 python3 ~/bin/tapguard.py --ctl mode full
-python3 ~/bin/tapguard.py --ctl delay 2.0
+python3 ~/bin/tapguard.py --ctl mode tap
 python3 ~/bin/tapguard.py --ctl pause
 python3 ~/bin/tapguard.py --ctl resume
 python3 ~/bin/tapguard.py --ctl stop
 ```
 
-Settings live in `~/.config/tapguard.json`. The local socket, status file, lock and diagnostic log live in `~/.cache/tapguard/`.
+Settings: `~/.config/tapguard.json`. Status/socket/log/recovery data: `~/.cache/tapguard/`. The socket is local and 0600. No typed characters or touch coordinates are logged or transmitted. Typing fallback uses X11 key activity; the separate palm reader opens input devices only to identify the named touchpad and reads only that device's events.
 
 ## Recovery and limitations
 
-Recovery is best effort, not guaranteed. The supervisor cannot recover a hung worker that never exits, termination of both processes, or loss of the X11 session. XInput commands can also fail. Restoration explicitly enables both the device and tap-to-click, even if your normal tapping preference was off.
+Missing, stale or disconnected palm input restores normal trackpad operation; the reader retries access and reconnection. The panel reports Sensor offline rather than silently switching to typing lockout. Kernel event drops trigger a fresh slot snapshot; pause/stop/shutdown restore input, and the supervisor attempts recovery if the worker exits. A small recovery file preserves the original libinput typing setting through a worker crash.
 
-If the trackpad remains blocked, use an external mouse or keyboard to open a terminal. Stop the controller, then restore the device:
+Recovery is best effort if X11/xinput fails or both processes are killed. Initial contact can leak briefly before the separate XInput disable operation. This is a userspace gate, not an atomic driver filter. Re-enabling X input may require lifting and replacing an already-down finger. Threshold tuning, suspend/resume, screen-reader behavior and broader hardware acceptance need on-device verification. Normal paused behavior may include the original libinput typing timeout.
+
+If input stays blocked, use your keyboard or external mouse to stop the controller and restore input:
 
 ```bash
 python3 ~/bin/tapguard.py --ctl stop
 xinput enable 'Apple SPI Touchpad'
 xinput set-prop 'Apple SPI Touchpad' 'libinput Tapping Enabled' 1
+xinput set-prop 'Apple SPI Touchpad' 'libinput Disable While Typing Enabled' 1
 ```
 
-If it locks again, the controller may still be running: stop its foreground terminal with Ctrl+C, disable the startup entry as shown below, and log out or reboot. Login resets session-scoped XInput state; disabling autostart prevents immediate recurrence. Recovery commands need the affected desktop's X11 session and are not expected to work from an unrelated text console.
+The final value 1 matches this owner's original typing-protection setting; use your previous value if different. Disable the startup entry and log out/in if recovery does not hold. Avoid running the temporary palm test alongside the permanent controller.
 
-## Uninstall / disable
+## Rollback / uninstall
 
-From the extracted folder:
+Run `bash uninstall.sh` to stop protection and disable autostart. It leaves files/settings for rollback. To roll back, stop the controller, restore `tapguard.py`, the applet folder, `tapguard.json` and the autostart entry from the printed backup directory, then log out/in. Older v3.1 controllers ignore `palm` mode, so restore the saved config as well. The extra `~/bin/palm.py` can remain unused.
+
+To remove the new access rule after stopping Palm mode:
 
 ```bash
-bash uninstall.sh
+sudo rm /etc/udev/rules.d/70-tapguard-palm.rules
+sudo udevadm control --reload-rules
 ```
 
-This disables autostart, requests controller shutdown, and attempts trackpad recovery. It reports recovery errors rather than claiming success. Remove TapGuard from the Cinnamon panel. Installed files, backups and settings remain for rollback. After confirming the controller has stopped and removing the applet, you may delete `~/bin/tapguard.py`, `~/.local/share/cinnamon/applets/tapguard@local/`, `~/.config/tapguard.json` and `~/.cache/tapguard/` if no longer wanted.
-
-To disable future starts manually:
-
-```bash
-rm -f ~/.config/autostart/tapguard-v3.desktop
-```
-
-To roll back, stop TapGuard and restore your timestamped `~/bin/tapguard-before-v3.1-*.py` backup. Restore an older startup entry only if you deliberately want that older version to start.
-
-## Privacy and security
-
-The Python source does not save or transmit typed characters and contains no network client. It reads the system-wide X11 event stream and uses only `RawKeyPress` activity; X11 event monitoring is inherently sensitive, so review the source before running it. It does not require root or alter kernel modules or Kinto configuration.
-
-XInput is invoked with argument lists rather than shell interpolation. The control socket is local and mode 0600; controller-created files use a restrictive umask. Commands are limited to the documented controls. Processes already running as your desktop user remain within the same trust boundary. Logs contain operational errors, not a keyboard event transcript.
+Log out/in (or reboot) to refresh device ACLs. The user is not added to any group and no root daemon or passwordless sudo rule is installed.
 
 ## Development checks
 
 ```bash
 python3 -m unittest discover -s tests -v
-python3 -m py_compile tapguard.py
-bash -n install.sh uninstall.sh upgrade-slider.sh
+python3 -m py_compile tapguard.py palm.py
+node --check cinnamon/tapguard@local/applet.js
+node tests/test_applet.js
+bash -n install.sh uninstall.sh upgrade-palm.sh enable-palm-access.sh
+udevadm verify 70-tapguard-palm.rules
 ```
 
-See [CHANGELOG.md](CHANGELOG.md) and [RELEASE-NOTES.md](RELEASE-NOTES.md). The original `upgrade-slider.sh` is retained for historical GUI-only upgrades; use the full installer to obtain the release's controller and installer changes.
+The owner confirmed the temporary prototype's palm-plus-thumb suppression and immediate unlock. The persistent v3.2 integration requires a fresh on-device check after installation. Automated checks use mocked input commands; they do not establish hardware or login acceptance.
 
-## License
-
-MIT; see [LICENSE](LICENSE). The source archive contained no pre-existing license or third-party attribution notices. This repository applies the owner's requested MIT license to the supplied project; installed system dependencies retain their own licenses.
+MIT licensed; see LICENSE. System dependencies retain their own licenses.

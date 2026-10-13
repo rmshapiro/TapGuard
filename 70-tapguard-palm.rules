@@ -1,0 +1,2 @@
+# Access only to the Apple SPI Touchpad event device for the active desktop user.
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Apple SPI Touchpad", TAG+="uaccess"
