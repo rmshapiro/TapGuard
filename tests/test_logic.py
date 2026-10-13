@@ -2,6 +2,8 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from unittest.mock import patch
 
 path = Path(__file__).resolve().parents[1] / "tapguard.py"
@@ -89,3 +91,78 @@ class RecoveryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class PalmControllerTests(ControllerTests):
+    def setUp(self):
+        super().setUp()
+        self.controller.original_dwt = 1
+        self.controller.current_dwt = 1
+        self.controller.config['mode'] = 'palm'
+        self.state = dict(ready=True, palm=False, error='', generation=1)
+        self.sensor = patch.object(self.controller.palm, 'snapshot', side_effect=lambda: dict(self.state))
+        self.sensor.start()
+
+    def tearDown(self):
+        self.sensor.stop()
+        super().tearDown()
+
+    # Override inherited typing checks: those are independently tested above.
+    def test_full_lockout_and_timeout(self):
+        self.state['palm'] = True
+        self.controller.last_key = 0
+        self.controller.apply_state()
+        self.assertFalse(self.controller.current_device_enabled)
+        self.assertEqual(self.controller.current_dwt, 0)
+        self.assertTrue(self.controller.status()['locked'])
+        self.assertEqual(self.controller.status()['remaining'], 0)
+        self.state['palm'] = False
+        self.controller.last_key = tapguard.time.monotonic()
+        self.controller.apply_state()
+        self.assertTrue(self.controller.current_device_enabled)  # Typing has no effect.
+
+    def test_tap_only_and_pause_restores(self):
+        self.state['palm'] = True
+        self.controller.apply_state()
+        self.controller.apply_command({'command':'pause'})
+        self.assertTrue(self.controller.current_device_enabled)
+        self.assertEqual(self.controller.current_dwt, 1)
+        self.controller.apply_command({'command':'resume'})
+        self.controller.apply_state()
+        self.assertFalse(self.controller.current_device_enabled)
+
+    def test_switch_full_to_tap_during_lock(self):
+        self.state['palm'] = True
+        self.controller.apply_state()
+        with patch.object(tapguard,'save_config') as save:
+            self.controller.apply_command({'command':'mode','value':'tap'})
+            save.assert_called_once()
+        self.assertTrue(self.controller.current_device_enabled)
+        self.assertEqual(self.controller.current_dwt, 1)
+
+    def test_sensor_loss_restores_and_reconnect_relocks(self):
+        self.state['palm'] = True
+        self.controller.apply_state()
+        self.state.update(ready=False,palm=False,error='disconnected')
+        self.controller.apply_state()
+        self.assertTrue(self.controller.current_device_enabled)
+        self.assertEqual(self.controller.current_dwt,1)
+        self.state.update(ready=True,palm=True,generation=2,error='')
+        self.controller.apply_state()
+        self.assertFalse(self.controller.current_device_enabled)
+
+    def test_unavailable_mode_does_not_persist(self):
+        self.controller.config['mode']='full'
+        self.state['ready']=False
+        with patch.object(tapguard,'save_config') as save:
+            result=self.controller.apply_command({'command':'mode','value':'palm'})
+            self.assertFalse(result['ok'])
+            save.assert_not_called()
+        self.assertEqual(self.controller.config['mode'],'full')
+
+    def test_original_disabled_dwt_is_preserved(self):
+        self.controller.original_dwt=0
+        self.controller.current_dwt=0
+        self.state['palm']=True
+        self.controller.apply_state()
+        self.controller.apply_command({'command':'pause'})
+        self.assertEqual(self.controller.current_dwt,0)

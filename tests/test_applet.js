@@ -8,11 +8,11 @@ vm.createContext(context);
 vm.runInContext(fs.readFileSync('cinnamon/tapguard@local/applet.js','utf8') + '\nthis.AppletClass = TapGuardApplet;',context);
 const app = Object.create(context.AppletClass.prototype);
 function item() {return {setShowDot(v) {this.dot=v;}, label: {set_text(v) {this.text=v;}}};}
-app._modeItems = {tap:item(), full:item()};
+app._modeItems = {palm:item(), tap:item(), full:item()};
 app._script = '/test/tapguard.py';
 app._syncMode('full');
 assert.equal(app._modeItems.full.dot,true);
-assert.equal(app._modeItems.tap.label.text,'Select: Block taps only');
+assert.equal(app._modeItems.tap.label.text,'Select: After typing: block taps only');
 app._selectMode('tap');
 assert.equal(app._modeItems.full.dot,true); // Wait for confirmation.
 callback({communicate_utf8_finish() {return [true, '{"ok":true,"mode":"tap"}', ''];}, get_successful() {return true;}}, {});
@@ -24,6 +24,10 @@ app._selectMode('tap');
 callback({communicate_utf8_finish() {return [true, '', 'offline'];}, get_successful() {return false;}}, {});
 assert.equal(refreshed,true);
 app._syncMode(null);
+assert.equal(app._modeItems.tap.dot,false);
+assert.equal(app._modeItems.full.dot,false);
+app._syncMode('palm');
+assert.equal(app._modeItems.palm.dot,true);
 assert.equal(app._modeItems.tap.dot,false);
 assert.equal(app._modeItems.full.dot,false);
 console.log('Applet mode confirmation, exclusivity, failure and unknown-state checks passed.');

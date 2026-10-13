@@ -1,3 +1,12 @@
+# v3.2.0
+
+- Add saved Palm lockout mode: whole trackpad blocked while any palm contact remains; no typing delay.
+- Keep typing modes and delay setting; add matching panel and Tk controls.
+- Add raw multitouch slot tracking, stale-reader fail-open recovery, reconnect and event-drop resynchronization.
+- Restore original libinput typing-protection setting on pause/mode exit/shutdown.
+- Add touchpad-only uaccess setup and full upgrade with backup and preserved autostart preference.
+- Persistent mode, login startup and panel status verified by owner on October 13, 2026.
+
 # v3.1.1
 
 - Show confirmed Cinnamon menu mode with native radio selection, actionable labels and accessible checked state.

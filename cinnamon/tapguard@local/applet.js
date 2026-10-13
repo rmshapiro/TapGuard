@@ -29,7 +29,7 @@ class TapGuardApplet extends Applet.TextIconApplet {
         this.menu.addMenuItem(this._toggleItem);
 
         this._modeItems = {};
-        for (let mode of ['tap', 'full']) {
+        for (let mode of ['palm', 'tap', 'full']) {
             let item = new PopupMenu.PopupMenuItem('');
             item.actor.accessible_role = Atk.Role.RADIO_MENU_ITEM;
             item.connect('activate', () => this._selectMode(mode));
@@ -55,9 +55,9 @@ class TapGuardApplet extends Applet.TextIconApplet {
     }
 
     _syncMode(mode) {
-        for (let value of ['tap', 'full']) {
+        for (let value of ['palm', 'tap', 'full']) {
             let selected = mode === value;
-            let description = value === 'tap' ? 'Block taps only' : 'Full trackpad lockout';
+            let description = {palm: 'Lock while palm is down', tap: 'After typing: block taps only', full: 'After typing: full trackpad lockout'}[value];
             this._modeItems[value].setShowDot(selected);
             this._modeItems[value].label.set_text(
                 (selected ? 'Selected: ' : 'Select: ') + description);
@@ -111,14 +111,18 @@ class TapGuardApplet extends Applet.TextIconApplet {
             let label;
             if (!s.enabled)
                 label = 'TG Paused';
+            else if (s.mode === 'palm' && !s.palm_ready)
+                label = 'TG Sensor offline';
+            else if (s.mode === 'palm' && s.locked)
+                label = 'TG Palm';
             else if (s.locked)
                 label = 'TG ' + Number(s.remaining).toFixed(1) + 's';
             else
                 label = 'TG Ready';
             this.set_applet_label(label);
             this.set_applet_tooltip('TapGuard: ' +
-                (s.mode === 'full' ? 'Full lockout' : 'Tap-only') +
-                ' / ' + Number(s.delay).toFixed(1) + 's delay' +
+                (s.mode === 'palm' ? 'Palm lockout / no typing delay' + (s.palm_ready ? '' : ' / ' + s.palm_error) :
+                    (s.mode === 'full' ? 'Full lockout' : 'Tap-only') + ' / ' + Number(s.delay).toFixed(1) + 's delay') +
                 (s.enabled ? '' : ' (paused)'));
             this._toggleItem.label.set_text(s.enabled ? 'Pause protection' : 'Resume protection');
         } catch (error) {
