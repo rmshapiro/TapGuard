@@ -93,6 +93,6 @@ bash -n install.sh uninstall.sh upgrade-palm.sh enable-palm-access.sh
 udevadm verify 70-tapguard-palm.rules
 ```
 
-The owner confirmed the temporary prototype's palm-plus-thumb suppression and immediate unlock. The persistent v3.2 integration requires a fresh on-device check after installation. Automated checks use mocked input commands; they do not establish hardware or login acceptance.
+The owner verified the persistent v3.2 installation after logging out and back in on October 13, 2026: palm-plus-thumb suppression, immediate unlock, no errant cursor movement, accurate panel status and login startup. Automated checks supplement this owner-reported acceptance; reconnect, suspend and screen-reader behavior have not been independently verified.
 
 MIT licensed; see LICENSE. System dependencies retain their own licenses.

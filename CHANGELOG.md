@@ -5,7 +5,7 @@
 - Add raw multitouch slot tracking, stale-reader fail-open recovery, reconnect and event-drop resynchronization.
 - Restore original libinput typing-protection setting on pause/mode exit/shutdown.
 - Add touchpad-only uaccess setup and full upgrade with backup and preserved autostart preference.
-- Prototype behavior confirmed by owner; permanent integration awaits on-device acceptance.
+- Persistent mode, login startup and panel status verified by owner on October 13, 2026.
 
 # v3.1.1
 
